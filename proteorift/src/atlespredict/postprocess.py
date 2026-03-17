@@ -1,15 +1,12 @@
 import os
 from os.path import join
 import pandas as pd
-import logging
 
 from proteorift.src.atlesconfig import config
 
-logger = logging.getLogger(__name__)
-
 
 def post_process_pin_files(rank, pin_dir_path):
-    logger.info("Post-processing pin files at %s", pin_dir_path)
+    print("Post-processing pin files at {}".format(pin_dir_path))
     file_path = join(pin_dir_path, "target.pin" if rank == 0 else "decoy.pin")
     df = pd.read_csv(file_path, sep='\t')
 
@@ -19,7 +16,7 @@ def post_process_pin_files(rank, pin_dir_path):
     top_psms_df = keep_top_psms(df)
 
     # Write back the pin files to disk
-    logger.info("Writing pin files to disk")
+    print("Writing pin files to disk")
     # TODO: uncomment two lines below
     os.remove(file_path)
     top_psms_df.to_csv(file_path, index=False, sep='\t')
@@ -32,9 +29,9 @@ def post_process_pin_files(rank, pin_dir_path):
 def keep_top_psms(df):
     keep_psms = config.get_config(section="search", key="keep_psms")
     # Sort the dataframe by 'SpecId' and 'SNAP' in descending order
-    logger.info('Keeping only the top %s PSMs', keep_psms)
+    print('Keeping only the top {} PSMs'.format(keep_psms))
 
-    logger.info('Size before removal: %d', len(df))
+    print("Size before removal: {}".format(len(df)))
     df = df.sort_values(['SpecId', 'SNAP'], ascending=[True, False])
 
     # Group the dataframe by 'SpecId' and keep the top 'keep_psms' rows
@@ -42,7 +39,7 @@ def keep_top_psms(df):
 
     # Reset the index of the filtered dataframe
     top_psms_df.reset_index(drop=True, inplace=True)
-    logger.info('Size after removal: %d', len(top_psms_df))
+    print("Size after removal: {}".format(len(top_psms_df)))
     return top_psms_df
 
 
@@ -97,7 +94,7 @@ def generate_percolator_input(l_pep_inds, l_pep_vals, l_spec_inds, pd_dataset, s
 def write_to_pin(rank, pep_inds, psm_vals, spec_inds, l_pep_dataset, spec_charges, out_pin_dir):
     os.makedirs(out_pin_dir, exist_ok=True)
     if rank == 0:
-        logger.info("Generating percolator pin files...")
+        print("Generating percolator pin files...")
     pin_charge = config.get_config(section="search", key="charge")
     charge_cols = [f"charge-{ch+1}" for ch in range(pin_charge)]
     cols = (
@@ -128,6 +125,6 @@ def write_to_pin(rank, pep_inds, psm_vals, spec_inds, l_pep_dataset, spec_charge
         df.to_csv(f, sep="\t", index=False, header=not f.tell())
 
     if rank == 0:
-        logger.info("Wrote percolator files")
+        print("Wrote percolator files: ")
     # dist.barrier()
-    logger.info('%s', join(out_pin_dir, "target.pin") if rank == 0 else join(out_pin_dir, "decoy.pin"))
+    print("{}".format(join(out_pin_dir, "target.pin") if rank == 0 else join(out_pin_dir, "decoy.pin")))

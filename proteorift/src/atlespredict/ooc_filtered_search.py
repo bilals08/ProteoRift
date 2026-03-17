@@ -95,9 +95,8 @@ def classify_peptides(index_path):
 def get_snap_model(rank):
     model_name = config.get_config(key="model_name", section="search")
     print("Using model: {}".format(model_name))
-    map_loc = torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
-    snap_model = specollate_model.Net(vocab_size=30, embedding_dim=512, hidden_lstm_dim=512, lstm_layers=2).to(map_loc)
-    snap_model = nn.parallel.DistributedDataParallel(snap_model, device_ids=[rank]) if map_loc.type == "cuda" else nn.parallel.DistributedDataParallel(snap_model)
+    snap_model = specollate_model.Net(vocab_size=30, embedding_dim=512, hidden_lstm_dim=512, lstm_layers=2).to(rank)
+    snap_model = nn.parallel.DistributedDataParallel(snap_model, device_ids=[rank])
     # snap_model.load_state_dict(torch.load("models/32-embed-2-lstm-SnapLoss2-noch-3k-1k-152.pt")["model_state_dict"])
     # below one has 26975 identified peptides.
     # snap_model.load_state_dict(
@@ -108,7 +107,7 @@ def get_snap_model(rank):
     #     torch.load("models/hcd/512-embed-2-lstm-SnapLoss2D-inputCharge-80k-nist-massive-116.pt")["model_state_dict"]
     # )
 
-    snap_model.load_state_dict(torch.load("specollate-model/{}".format(model_name), map_location=map_loc)["model_state_dict"])
+    snap_model.load_state_dict(torch.load("specollate-model/{}".format(model_name))["model_state_dict"])
     snap_model = snap_model.module
     snap_model.eval()
     print(snap_model)
@@ -170,8 +169,7 @@ def run_atles(rank, spec_loader):
     #     )['model_state_dict'])
     model_.load_state_dict(
         torch.load(
-            "/lclhome/mtari008/DeepAtles/atles-out/1382/models/nist-massive-deepnovo-mass-ch-1382-c8mlqbq7-157.pt",
-            map_location=(torch.device(f"cuda:{rank}") if torch.cuda.is_available() else torch.device("cpu")),
+            "/lclhome/mtari008/DeepAtles/atles-out/1382/models/nist-massive-deepnovo-mass-ch-1382-c8mlqbq7-157.pt"
         )["model_state_dict"]
     )
     model_ = model_.module
@@ -275,7 +273,7 @@ def search_database(rank, spec_filt_dict, spec_charges, index_path, out_pin_dir)
             # load embeddings
             pep_embeddings_path = join(index_path, "peptide_embeddings" if rank == 0 else "decoy_embeddings")
             embedding_file_path = join(pep_embeddings_path, file_name)
-            e_peps = torch.load(embedding_file_path, map_location=torch.device("cpu"))
+            e_peps = torch.load(embedding_file_path)
             # pep_data = [[idx + class_offsets[file_name], e_pep, mass]
             #             for idx, (e_pep, mass) in enumerate(zip(e_peps, pep_dataset.pep_mass_list))]
             pep_data = [

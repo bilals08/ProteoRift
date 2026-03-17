@@ -17,9 +17,6 @@ from tqdm import tqdm
 from proteorift.src.atlesconfig import config, arg_parse
 from proteorift.src.atlespredict import dbsearch, pepdataset, postprocess, specdataset, specollate_model
 from proteorift.src.atlesutils import utils
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -82,7 +79,7 @@ def chunkify_peptides(index_path):
 
     file_names = []
     pep_counter = chunk_counter = 0
-    logger.info("Chunkify peptides and writing to files")
+    print("Chunkify peptides and writing to files")
     while True:
         min_mass = pep_dataset.pep_mass_list[pep_counter]
         max_mass = (
@@ -109,11 +106,9 @@ def chunkify_peptides(index_path):
 
 def get_snap_model(rank):
     model_name = config.get_config(key="model_name", section="search")
-    logger.info("Using model: %s", model_name)
-    # normalize device and map model weights to the same device when loading
-    map_loc = torch.device(f"cuda:{rank}" if torch.cuda.is_available() else "cpu")
-    snap_model = specollate_model.Net(vocab_size=30, embedding_dim=512, hidden_lstm_dim=512, lstm_layers=2).to(map_loc)
-    snap_model = nn.parallel.DistributedDataParallel(snap_model, device_ids=[rank]) if map_loc.type == "cuda" else nn.parallel.DistributedDataParallel(snap_model)
+    print("Using model: {}".format(model_name))
+    snap_model = specollate_model.Net(vocab_size=30, embedding_dim=512, hidden_lstm_dim=512, lstm_layers=2).to(rank)
+    snap_model = nn.parallel.DistributedDataParallel(snap_model, device_ids=[rank])
     # snap_model.load_state_dict(torch.load('models/32-embed-2-lstm-SnapLoss2-noch-3k-1k-152.pt')['model_state_dict'])
     # below one has 26975 identified peptides.
     # snap_model.load_state_dict(
@@ -123,10 +118,10 @@ def get_snap_model(rank):
     # snap_model.load_state_dict(
     #     torch.load("models/hcd/512-embed-2-lstm-SnapLoss2D-inputCharge-80k-nist-massive-116.pt")["model_state_dict"]
     # )
-    snap_model.load_state_dict(torch.load("specollate-model/{}".format(model_name), map_location=map_loc)["model_state_dict"])
+    snap_model.load_state_dict(torch.load("specollate-model/{}".format(model_name))["model_state_dict"])
     snap_model = snap_model.module
     snap_model.eval()
-    logger.debug("Specollate model loaded: %s", snap_model)
+    print(snap_model)
     return snap_model
 
 
@@ -139,11 +134,11 @@ def process_peptide_chunks(rank, snap_model, file_names, index_path):
     for file_name in file_names:
         pep_chunks_path = join(index_path, "peptide_chunks")
         pep_file_path = join(pep_chunks_path, file_name)
-            if os.path.exists(pep_file_path):
+        if os.path.exists(pep_file_path):
             if not os.path.getsize(pep_file_path):
                 os.remove(pep_file_path)
                 continue
-            logger.info("Processing file: %s", pep_file_path)
+            print("Processing file: {}".format(pep_file_path))
             # process peptides
             pep_dataset = pepdataset.PeptideDataset(pep_dir, pep_file_path, decoy=rank == 1)
             pep_loader = torch.utils.data.DataLoader(
@@ -152,22 +147,22 @@ def process_peptide_chunks(rank, snap_model, file_names, index_path):
                 collate_fn=dbsearch.pep_collate,
             )
 
-            logger.info("Processing %s", "Peptides" if rank == 0 else "Decoys")
+            print("Processing {}...".format("Peptides" if rank == 0 else "Decoys"))
             e_peps = dbsearch.runSpeCollateModel(pep_loader, snap_model, "peps", rank)
-            logger.info("Finished processing peptides/decoys")
+            print("Peptides done!")
 
             # save embeddings
             embedding_path = join(index_path, embedding_type, file_name)
-            logger.info("Saving embeddings at %s", embedding_path)
+            print("Saving embeddings at {}".format(embedding_path))
             torch.save(e_peps, embedding_path)
-            logger.info("Saved embeddings")
+            print("Done \n")
 
     dist.barrier()
 
 
 def process_spectra(rank, snap_model):
     prep_path = config.get_config(section="search", key="prep_path")
-    logger.info("Processing Spectra: %s", prep_path)
+    print("Processing Spectra: {}".format(prep_path))
     spec_batch_size = config.get_config(key="spec_batch_size", section="search")
     spec_dataset = specdataset.SpectraDataset(join(prep_path, "specs.pkl"))
     spec_loader = torch.utils.data.DataLoader(
@@ -176,16 +171,16 @@ def process_spectra(rank, snap_model):
         collate_fn=dbsearch.spec_collate,
     )
 
-    logger.info("Processing spectra")
+    print("Processing spectra...")
     e_specs = dbsearch.runSpeCollateModel(spec_loader, snap_model, "specs", rank)
-    logger.info("Finished processing spectra")
+    print("Spectra done!")
     return e_specs, spec_dataset.masses, spec_dataset.charges
 
 
 # 3 - Loop over spectra classes, load embeddings for peptides, peform db search
 # def create_spectra_dict(lens, cleavs, mods, e_specs, spec_masses, file_names):
 def chunkify_spectra(e_specs, spec_masses, file_names):
-    logger.info("Creating spectra chunk dictionary")
+    print("Creating spectra chunk dictionary.")
     tol = config.get_config(key="precursor_tolerance", section="search")
     tol_type = config.get_config(key="precursor_tolerance_type", section="search")
     if tol_type == "ppm":
@@ -218,21 +213,21 @@ def search_database(rank, spec_filt_dict, spec_charges, index_path, out_pin_dir)
     unfiltered_time = 0
 
     cum = 0
-    logger.info("Running unfiltered %s database search.", "target" if rank == 0 else "decoy")
+    print("Running unfiltered {} database search.".format("target" if rank == 0 else "decoy"))
     for file_name in spec_filt_dict:
-        logger.debug("Searching for key %s", file_name)
-        logger.info("Chunk: %s", file_name)
+        print("Searching for key {}.".format(file_name))
+        print("Chunk: {}".format(file_name))
         pep_chunks_path = join(index_path, "peptide_chunks")
         pep_file_path = join(pep_chunks_path, file_name)
         if not os.path.exists(pep_file_path):
-            logger.warning("File %s not found. Skipping.", pep_file_path)
+            print("File {} not found. Skipping.".format(pep_file_path))
             continue
         # Load peptides
         pep_dataset = pepdataset.PeptideDataset(pep_chunks_path, file_name, decoy=rank == 1)
         # Load embeddings
         pep_embeddings_path = join(index_path, "peptide_embeddings" if rank == 0 else "decoy_embeddings")
         pep_embeddings_file_path = join(pep_embeddings_path, file_name)
-        e_peps = torch.load(pep_embeddings_file_path, map_location=torch.device("cpu"))
+        e_peps = torch.load(pep_embeddings_file_path)
         pep_data = [[idx, e_pep, mass] for idx, (e_pep, mass) in enumerate(zip(e_peps, pep_dataset.pep_mass_list))]
         cum += len(pep_data)
         spec_subset = spec_filt_dict[file_name]
@@ -250,7 +245,7 @@ def search_database(rank, spec_filt_dict, spec_charges, index_path, out_pin_dir)
         if not spec_inds:
             continue
 
-        logger.info("%s PSMS: %d", "Target" if rank == 0 else "Decoy", len(pep_inds))
+        print("{} PSMS: {}".format("Target" if rank == 0 else "Decoy", len(pep_inds)))
 
         # 4 - Write PSMs to pin file
         postprocess.write_to_pin(rank, pep_inds, psm_vals, spec_inds, pep_dataset, spec_charges, out_pin_dir)
@@ -267,7 +262,7 @@ def run_atles_search(rank, world_size, config_path, args_dict):
     spectra = PurePath(config.get_config(key="prep_path", section="search")).name
     out_pin_dir = join(os.getcwd(), "percolator", pep_index_name + "-unfiltered-" + spectra)
 
-    logger.info("Running unfiltered ooc search on %s.", pep_index_name)
+    print("Running unfiltered ooc search on {}.".format(pep_index_name))
     with torch.no_grad():
         snap_model = get_snap_model(rank)
         dist.barrier()
@@ -294,9 +289,9 @@ def run_atles_search(rank, world_size, config_path, args_dict):
         l_time = time.time()
         dist.barrier()
         search_database(rank, spec_filt_dict, spec_charges, index_path, out_pin_dir)
-        logger.info("Search time: %s", time.time() - l_time)
+        print("Search time: {}".format(time.time() - l_time))
         postprocess.post_process_pin_files(rank, out_pin_dir)
-        logger.info("Total time: %s", time.time() - t_time)
+        print("Total time: {}".format(time.time() - t_time))
 
 
 if __name__ == "__main__":
@@ -310,14 +305,14 @@ if __name__ == "__main__":
     input_params = parser.parse_args()
 
     if input_params.config:
-        logger.info("config: %s", input_params.config)
+        tqdm.write("config: %s" % input_params.path)
     config.param_path = input_params.config if input_params.config else join((dirname(__file__)), "config.ini")
 
     num_gpus = torch.cuda.device_count()
-    logger.info("Num GPUs: %d", num_gpus)
+    print("Num GPUs: {}".format(num_gpus))
     start_time = time.time()
     mp.spawn(run_atles_search, args=(2,), nprocs=2, join=True)
     # run_atles_search(0, 1)
-    logger.info("Total time: %s", time.time() - start_time)
+    print("Total time: {}".format(time.time() - start_time))
 
     # if all filters disabled, call a different function

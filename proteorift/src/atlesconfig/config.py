@@ -2,9 +2,6 @@ import ast
 import os
 from collections import OrderedDict
 from configparser import ConfigParser
-import logging
-
-logger = logging.getLogger(__name__)
 
 # Define constants
 # AAMass = OrderedDict([('A', 71.037114), ('C', 103.009185), ('D', 115.026943), ('E', 129.042593),
@@ -114,7 +111,7 @@ def get_all_config():
     global config_dict
 
     # If file path is given use it otherwise use default.
-    logger.debug("param_path: %s", param_path if param_path else DEFAULT_PARAM_PATH)
+    print("param_path: ", param_path if param_path else DEFAULT_PARAM_PATH)
     file_path = param_path if param_path else DEFAULT_PARAM_PATH
 
 

@@ -11,39 +11,6 @@ from proteorift.src.atlestrain import process
 from proteorift.src.atlesutils import utils
 
 
-def _normalize_device(device):
-    """Return a torch.device. Accepts int (GPU index), string, or torch.device.
-    If a CUDA device is requested but CUDA is not available, fall back to CPU.
-    """
-    if isinstance(device, torch.device):
-        dev = device
-    elif isinstance(device, int):
-        # treat int as cuda index when available
-        dev = torch.device(f"cuda:{device}" if torch.cuda.is_available() else "cpu")
-    elif isinstance(device, str):
-        # if string requests cuda but cuda not available -> cpu
-        if device.startswith("cuda") and not torch.cuda.is_available():
-            dev = torch.device("cpu")
-        else:
-            dev = torch.device(device)
-    else:
-        dev = torch.device("cpu")
-    return dev
-
-
-def _move_to(obj, device):
-    """Safely move tensors (or nested lists/tuples) to `device`. Non-tensors are returned unchanged."""
-    if torch.is_tensor(obj):
-        return obj.to(device)
-    if isinstance(obj, (list, tuple)):
-        moved = [
-            _move_to(x, device)
-            for x in obj
-        ]
-        return type(obj)(moved)
-    return obj
-
-
 def spec_collate(batch):
     specs = torch.cat([item[0] for item in batch], 0)
     char_mass = torch.FloatTensor([item[1] for item in batch])
@@ -90,7 +57,6 @@ def get_search_mask(spec_masses, pep_masses, tol):
 
 
 def runAtlesModel(loader, s_model, device):
-    device = _normalize_device(device)
     with torch.no_grad():
         lens_out = torch.Tensor().cpu()
         cleavs_out = torch.Tensor().cpu()
@@ -99,8 +65,7 @@ def runAtlesModel(loader, s_model, device):
         pbar.set_description("Running Model...")
         # with progressbar.ProgressBar(max_value=len(loader)) as bar:
         for batch in pbar:
-            # safely move inputs to the device (handles non-tensor entries)
-            batch = _move_to(batch, device)
+            batch[0], batch[1] = batch[0].to(device), batch[1].to(device)
             input_mask = batch[0] == 0
             lens, cleavs, mods = s_model(batch[0], batch[1], input_mask)
             lens_out = torch.cat((lens_out, lens.to("cpu")), dim=0)
@@ -114,22 +79,20 @@ def runAtlesModel(loader, s_model, device):
 
 
 def runSpeCollateModel(loader, s_model, in_type, device):
-    device = _normalize_device(device)
     with torch.no_grad():
         out_out = torch.Tensor().cpu()
         pbar = tqdm(loader, file=sys.stdout)
         pbar.set_description("Running Model...")
         # with progressbar.ProgressBar(max_value=len(loader)) as bar:
         for batch in pbar:
-            batch = _move_to(batch, device)
+            batch[0], batch[1] = batch[0].to(device), batch[1].to(device)
             if in_type == "specs":
                 # Changes tensor dim from (batch_size, 50000) to (batch_size, 80000) by padding zeros.
                 pad = (0, 30000)
                 batch[0] = F.pad(batch[0], pad, "constant", 0.0)
                 out_ = s_model(batch, data_type=in_type)[0]
             elif in_type == "peps":
-                # batch already moved above; ensure batch[2] exists
-                batch[2] = _move_to(batch[2], device)
+                batch[2] = batch[2].to(device)
                 out_ = s_model(batch, data_type=in_type)[0]
             out_out = torch.cat((out_out, out_.to("cpu")), dim=0)
             # bar.update(batch_idx)
@@ -137,7 +100,6 @@ def runSpeCollateModel(loader, s_model, in_type, device):
 
 
 def search(search_loader, datasets, embeddings, device):
-    device = _normalize_device(device)
     pep_sort_inds = []
     pep_sort_vals = []
     dec_sort_inds = []
@@ -182,14 +144,14 @@ def search(search_loader, datasets, embeddings, device):
         dec_batch = e_decs[dec_min:dec_max]
         dec_masses = dec_dataset.pep_mass_list[dec_min:dec_max]
 
-        spec_batch = _move_to(spec_batch, device)
+        spec_batch = spec_batch.to(device)
         # print("pep batch len: {}".format(len(pep_batch)))
         l_pep_batch_size = 16384
         # l_pep_batch_size = 32768
         pep_loader = torch.utils.data.DataLoader(dataset=pep_batch, batch_size=l_pep_batch_size)
         l_pep_dist = []
         for pep_idx, l_pep_batch in enumerate(pep_loader):
-            l_pep_batch = _move_to(l_pep_batch, device)
+            l_pep_batch = l_pep_batch.to(device)
             l_st = pep_idx * l_pep_batch_size
             l_en = l_st + l_pep_batch_size
             l_pep_masses = pep_masses[l_st:l_en]
@@ -210,7 +172,7 @@ def search(search_loader, datasets, embeddings, device):
         dec_loader = torch.utils.data.DataLoader(dataset=dec_batch, batch_size=l_pep_batch_size)
         l_dec_dist = []
         for dec_idx, l_dec_batch in enumerate(dec_loader):
-            l_dec_batch = _move_to(l_dec_batch, device)
+            l_dec_batch = l_dec_batch.to(device)
             l_st = dec_idx * l_pep_batch_size
             l_en = l_st + l_pep_batch_size
             l_dec_masses = dec_masses[l_st:l_en]
@@ -353,8 +315,6 @@ def filtered_parallel_search(search_loader, peps, rank):
     precursor_tolerance = config.get_config(key="precursor_tolerance", section="search")
     tol_type = config.get_config(key="precursor_tolerance_type", section="search")
 
-    device = _normalize_device(rank)
-
     pbar = tqdm(search_loader, file=sys.stdout)
     pbar.set_description("Running Database Search...")
     # with progressbar.ProgressBar(max_value=len(search_loader)) as bar:
@@ -375,7 +335,7 @@ def filtered_parallel_search(search_loader, peps, rank):
             continue
         pep_masses = []
 
-        spec_batch = _move_to(spec_batch, device)
+        spec_batch = spec_batch.to(rank)
         # print("pep batch len: {}".format(len(pep_batch)))
         l_pep_batch_size = 512
         # l_pep_batch_size = 32768
@@ -385,7 +345,7 @@ def filtered_parallel_search(search_loader, peps, rank):
         for g_idx, l_pep_batch, l_pep_masses in pep_loader:
             g_ids.extend(g_idx)
             pep_masses.extend(l_pep_masses)
-            l_pep_batch = _move_to(l_pep_batch, device)
+            l_pep_batch = l_pep_batch.to(rank)
             # spec_pep_mask = get_search_mask(spec_masses, l_pep_masses, precursor_tolerance).to(rank)
             # spec_pep_mask[spec_pep_mask == 0] = float("inf")
             spec_pep_dist = 1.0 / process.pairwise_distances(spec_batch, l_pep_batch).to("cpu")

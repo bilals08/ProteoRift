@@ -12,9 +12,6 @@ from sklearn import preprocessing
 
 from proteorift.src.atlesconfig import config
 from proteorift.src.atlesutils import simulatespectra as sim
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class SpectraDataset(data.Dataset):
@@ -55,7 +52,7 @@ class SpectraDataset(data.Dataset):
         self.min_pep_len = config.get_config(section='ml', key='min_pep_len')
         self.spec_size = config.get_config(section='input', key='spec_size')
         
-        logger.info('dataset size: %d', len(data))
+        print('dataset size: {}'.format(len(data)))
 
 
     def __len__(self):

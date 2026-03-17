@@ -12,9 +12,6 @@ from os.path import join
 from proteorift.src.atlesconfig import config
 from proteorift.src.atlespredict import preprocess
 from proteorift.src.atlesutils import simulatespectra as sim
-import logging
-
-logger = logging.getLogger(__name__)
 
 
 class PeptideDataset(data.Dataset):
@@ -33,14 +30,14 @@ class PeptideDataset(data.Dataset):
 
         self.pep_path = dir_path
         self.vocab_size = len(self.aa2idx)  # + self.charge + self.num_species + 1
-        logger.info("Vocabulary size: %d", self.vocab_size)
+        print("Vocabulary size: {}".format(self.vocab_size))
         self.seq_len = config.get_config(section='ml', key='pep_seq_len')
 
-        logger.info("Loading peptides...")
+        print("Loading peptides...")
         # pep_lst, prot_list, pep_mass_lst, pep_modified_lst = load_peps(self.pep_path)
         out = load_peps(self.pep_path, fine_name, decoy=decoy)
 
-        logger.info("peptide list len: %d", len(out))
+        print("peptide list len: {}".format(len(out)))
         # print("peptide set len: {}".format(len(self.pep_lst_set)))
 #         out_dir = "/disk/raptor-2/mtari008/data/deepsnap/preprocessed-human-hcd-tryp-best/pts/"
 #         with open(join(out_dir, 'pep_pickle.pkl'), 'rb') as f:
@@ -56,7 +53,7 @@ class PeptideDataset(data.Dataset):
 #                 pep_modified_lst.append(any(aa.islower() for aa in s_pep))
 #         print("New peptides added: {}".format(added_counter))
 
-        logger.info("Sorting peptides...")
+        print("Sorting peptides...")
         # all_sorts = list(zip(*sorted(zip(pep_lst, prot_list, pep_mass_lst, pep_modified_lst), key=lambda x: x[2])))
         out.sort(key=lambda x: x[2])
         self.pep_list, self.prot_list, self.pep_mass_list, self.pep_modified_list = zip(*out)
@@ -65,8 +62,8 @@ class PeptideDataset(data.Dataset):
         # self.prot_list = all_sorts[1]
         # self.pep_mass_list = all_sorts[2]
         # self.pep_modified_list = all_sorts[3]
-        logger.info("Peptides sorted.")
-        logger.debug("Getting missed cleavages...")
+        print("Peptides sorted.")
+        print("Getting missed cleavages...")
         self.missed_cleavs = []
         for pep in self.pep_list:
             miss_clvs = (pep.count("K") + pep.count("R")) - (pep.count("KP") + pep.count("RP"))
@@ -74,11 +71,11 @@ class PeptideDataset(data.Dataset):
                 miss_clvs -= 1
             self.missed_cleavs.append(miss_clvs)
         if decoy:
-            logger.info("Generating decoy database...")
+            print("Generating decoy database...")
             self.pep_list, self.prot_list, self.pep_mass_list, self.pep_modified_list, self.missed_cleavs = \
                 self.get_docoys()
 
-        logger.info('%s Peptide Dataset Size: %d', "Decoy" if decoy else "Target", len(self.pep_list))
+        print('{} Peptide Dataset Size: {}'.format("Decoy" if decoy else "Target", len(self.pep_list)))
 
     def __len__(self):
         'Denotes the total number of samples'
@@ -182,7 +179,7 @@ def load_peps(pep_dir, file_name=None, decoy=False):
 
     tot_pep_count = 0
     for fasta_file in fasta_files:
-        logger.info('Reading: %s', fasta_file)
+        tqdm.write('Reading: {}'.format(fasta_file))
 
         f = open(fasta_file, "r")
         lines = f.readlines()
@@ -216,6 +213,6 @@ def load_peps(pep_dir, file_name=None, decoy=False):
                     # prot_list.append(temp_prot)
                     tot_pep_count += 1
             # bar.update(i)
-        logger.info("Peptides written: %d", tot_pep_count)
+        tqdm.write("Peptides written: {}".format(tot_pep_count))
 
         return out

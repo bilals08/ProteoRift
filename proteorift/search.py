@@ -31,7 +31,7 @@ class ProteoRiftSearch:
         length_filter: bool = True,
         missed_cleavages_filter: bool = True,
         modification_filter: bool = True,
-        device: str = "auto",
+        device: str = "cuda",
         cache_dir: Optional[str] = None,
     ):
         """Initialize ProteoRift search
@@ -56,10 +56,14 @@ class ProteoRiftSearch:
         }
         
         # Determine device
-        if device == "auto":
-            self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            self.device = device
+
+        self.device = device
+
+        # If the requested device is CUDA (or auto) but CUDA is not available,
+        # raise an explicit error so users run on a CUDA-enabled machine.
+    
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA is not available. Please use a CUDA-enabled machine.")
             
         self.cache_dir = cache_dir
         self.model_paths = None

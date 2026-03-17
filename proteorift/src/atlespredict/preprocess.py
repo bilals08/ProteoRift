@@ -7,11 +7,8 @@ import re
 
 import numpy as np
 import torch
-import logging
 
 from ..atlesconfig import config
-
-logger = logging.getLogger(__name__)
 
 
 def create_out_dir(dir_path, exist_ok=True):
@@ -60,7 +57,7 @@ def preprocess_mgfs(mgf_dir, out_dir):
     mgf_files = verify_in_dir(mgf_dir, "mgf")
     create_out_dir(out_dir, exist_ok=False)
 
-    logger.info('reading %d files', len(mgf_files))
+    print('reading {} files'.format(len(mgf_files)))
 
     spec_size = config.get_config(section='input', key='spec_size')
     charge = config.get_config(section='input', key='charge')
@@ -85,7 +82,7 @@ def preprocess_mgfs(mgf_dir, out_dir):
     tot_count = 0
     max_peaks = max_moz = 0
     for species_id, mgf_file in enumerate(mgf_files):
-        logger.info('Reading: %s', mgf_file)
+        print('Reading: {}'.format(mgf_file))
 
         f = open(mgf_file, "r")
         lines = f.readlines()
@@ -101,7 +98,7 @@ def preprocess_mgfs(mgf_dir, out_dir):
         pep_len_ign = 0
         dup_ign = 0
 
-        logger.debug('len of file: %d', len(lines))
+        print('len of file: ' + str(len(lines)))
         limit = 200000
         pep = []
         spec = []
@@ -187,15 +184,15 @@ def preprocess_mgfs(mgf_dir, out_dir):
                 new = int((i / len(lines)) * 100)
                 if new >= prev + 10:
                     # clear_output(wait=True)
-                    logger.info('count: %d', lcount)
-                    logger.info('%d%%', new)
+                    print('count: ' + str(lcount))
+                    print(str(new) + '%')
                     prev = new
 
         # print('max peaks: ' + str(max_peaks))
-        logger.info('In current file, read %d out of %d', lcount, count)
-        logger.info('Ignored: large mass: %s, pep len: %s, dup: %s', mass_ign, pep_len_ign, dup_ign)
-        logger.info('overall running count: %d', tot_count)
-        logger.info('max moz: %s', max_moz)
+        print('In current file, read {} out of {}'.format(lcount, count))
+        print("Ignored: large mass: {}, pep len: {}, dup: {}".format(mass_ign, pep_len_ign, dup_ign))
+        print('overall running count: ' + str(tot_count))
+        print('max moz: ' + str(max_moz))
 #         return pep_list, dataset, label
 #         tmp_pep_list, tmp_dataset, tmp_labels = read_msp(msp_file, species_id, decoy)
 #         pep_list.extend(tmp_dataset)
@@ -207,19 +204,20 @@ def preprocess_mgfs(mgf_dir, out_dir):
     # with open(join(out_dir, 'pep_spec.pkl'), 'wb') as f:
     #     pickle.dump(pep_spec, f)
 
-    logger.info('Statistics:')
-    logger.info('Charge distribution: %s', ch)
-    logger.info('Modified:\t%s', modified)
-    logger.info('Unmodified:\t%s', unmodified)
-    logger.info('Unique Peptides:\t%s', len(unique_pep_set))
-    logger.info('Sum: %s', summ)
-    logger.info('Sum-Squared: %s', sq_sum)
-    logger.info('N: %s', N)
+    print("Statistics:")
+    print("Charge distribution:")
+    print(ch)
+    print("Modified:\t{}".format(modified))
+    print("Unmodified:\t{}".format(unmodified))
+    print("Unique Peptides:\t{}".format(len(unique_pep_set)))
+    print("Sum: {}".format(summ))
+    print("Sum-Squared: {}".format(sq_sum))
+    print("N: {}".format(N))
     means = summ / N
-    logger.info('mean: %s', means)
+    print("mean: {}".format(means))
     stds = np.sqrt((sq_sum / N) - means**2)
     stds[stds < 0.0000001] = float("inf")
-    logger.info('std: %s', stds)
+    print("std: {}".format(stds))
     np.save(join(out_dir, 'means.npy'), means)
     np.save(join(out_dir, 'stds.npy'), stds)
 
