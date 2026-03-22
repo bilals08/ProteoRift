@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 from huggingface_hub import hf_hub_download, snapshot_download
+import json
 
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "proteorift"
 
@@ -22,21 +23,46 @@ def download_models(cache_dir=None):
     cache_dir.mkdir(parents=True, exist_ok=True)
     
     print("Downloading ProteoRift model from HuggingFace Hub...")
+    proteorift_config_path = hf_hub_download(
+        repo_id=f"{repo_default_id}/ProteoRift",
+        filename="config.json",
+        cache_dir=cache_dir,
+        repo_type="model"
+    )
+    # load file name from config
+    with open(proteorift_config_path, 'r') as f:
+        config = json.load(f)
+    model_filename = config.get("model_name", "pytorch_model.bin")
+
     proteorift_path = hf_hub_download(
         repo_id=f"{repo_default_id}/ProteoRift",
-        filename="proteorift_model_weights.pt",
+        filename=model_filename,
         cache_dir=cache_dir,
         repo_type="model"
     )
+    print(f"ProteoRift model downloaded to: {proteorift_path}")
     
+
     print("Downloading Specollate model from HuggingFace Hub...")
+    specollate_config_path = hf_hub_download(
+        repo_id=f"{repo_default_id}/SpeCollate",
+        filename="config.json",
+        cache_dir=cache_dir,
+        repo_type="model"
+    )
+    ## load file name from config
+    with open(specollate_config_path, 'r') as f:
+        config = json.load(f)
+    model_filename = config.get("model_name", "specollate_model_weights.pt")
+
     specollate_path = hf_hub_download(
         repo_id=f"{repo_default_id}/SpeCollate",
-        filename="specollate_model_weights.pt",
+        filename=model_filename,
         cache_dir=cache_dir,
         repo_type="model"
     )
-    
+    print(f"Specollate model downloaded to: {specollate_path}")
+
     print("Models downloaded successfully!")
     return proteorift_path, specollate_path
 
