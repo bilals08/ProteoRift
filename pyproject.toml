@@ -7,7 +7,7 @@ name = "proteorift"
 version = "1.2.2"
 description = "End-to-end machine learning pipeline for peptide database search"
 readme = "readme_pypi.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = {file = "License.md"}
 authors = [
     {name = "SaeedLab"},
