@@ -31,7 +31,7 @@ class ProteoRiftSearch:
         length_filter: bool = True,
         missed_cleavages_filter: bool = True,
         modification_filter: bool = True,
-        device: str = "cuda",
+        device: str = "auto",
         cache_dir: Optional[str] = None,
     ):
         """Initialize ProteoRift search
@@ -43,7 +43,7 @@ class ProteoRiftSearch:
             length_filter: Enable length filtering (default: True)
             missed_cleavages_filter: Enable missed cleavages filtering (default: True)
             modification_filter: Enable modification filtering (default: True)
-            device: Device to use ('cuda', 'cpu', or 'auto')
+            device: Device to use ('cuda', 'mps', 'cpu', or 'auto')
             cache_dir: Custom cache directory for models
         """
         self.config_params = {
@@ -55,15 +55,19 @@ class ProteoRiftSearch:
             'modification_filter': modification_filter,
         }
         
-        # Determine device
+        if device == "auto":
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
 
-        self.device = device
-
-        # If the requested device is CUDA (or auto) but CUDA is not available,
-        # raise an explicit error so users run on a CUDA-enabled machine.
-    
-        if not torch.cuda.is_available():
-            raise RuntimeError("CUDA is not available. Please use a CUDA-enabled machine.")
+        self.device = torch.device(device)
+        if self.device.type == "cuda" and not torch.cuda.is_available():
+            raise RuntimeError("CUDA is not available. Use device='mps' or device='cpu'.")
+        if self.device.type == "mps" and not torch.backends.mps.is_available():
+            raise RuntimeError("MPS is not available in this PyTorch installation.")
             
         self.cache_dir = cache_dir
         self.model_paths = None
@@ -231,10 +235,16 @@ class ProteoRiftSearch:
         
         # Run target and decoy searches sequentially without distributed setup
         logger.info("Running target search...")
-        run_search.run_specollate_par(rank=0, world_size=1, gConfig=config_file, forced_rank=0, use_distributed=False)
+        run_search.run_specollate_par(
+            rank=0, world_size=1, gConfig=config_file, forced_rank=0,
+            use_distributed=False, device=self.device
+        )
         
         logger.info("Running decoy search...")
-        run_search.run_specollate_par(rank=1, world_size=1, gConfig=config_file, forced_rank=1, use_distributed=False)
+        run_search.run_specollate_par(
+            rank=1, world_size=1, gConfig=config_file, forced_rank=1,
+            use_distributed=False, device=self.device
+        )
         
         # Cleanup
         os.unlink(config_file)
@@ -287,14 +297,18 @@ class ProteoRiftSearch:
             
             logger.info("Running database search with preprocessed sample data...")
             
-            num_gpus = torch.cuda.device_count() if torch.cuda.is_available() else 1
-            
             # Run target and decoy searches sequentially without distributed setup
             logger.info("Running target search...")
-            run_search.run_specollate_par(rank=0, world_size=1, gConfig=config_file, forced_rank=0, use_distributed=False)
+            run_search.run_specollate_par(
+                rank=0, world_size=1, gConfig=config_file, forced_rank=0,
+                use_distributed=False, device=self.device
+            )
             
             logger.info("Running decoy search...")
-            run_search.run_specollate_par(rank=1, world_size=1, gConfig=config_file, forced_rank=1, use_distributed=False)
+            run_search.run_specollate_par(
+                rank=1, world_size=1, gConfig=config_file, forced_rank=1,
+                use_distributed=False, device=self.device
+            )
             
             os.unlink(config_file)
         else:

@@ -174,9 +174,11 @@ class Net(nn.Module):
 
     def one_hot_tensor(self, peps):
         batch_size = len(peps)
-        src = torch.zeros((batch_size, self.seq_len), dtype=torch.float16, device="cuda")
+        src = torch.zeros((batch_size, self.seq_len), dtype=torch.float16, device=peps.device)
         src[peps > 0] = 1.0
-        one_hots = torch.zeros((batch_size, self.seq_len, self.vocab_size), dtype=torch.float16, device="cuda")
+        one_hots = torch.zeros(
+            (batch_size, self.seq_len, self.vocab_size), dtype=torch.float16, device=peps.device
+        )
         one_hots.scatter_(2, peps.view(batch_size, self.seq_len, 1), src.view(batch_size, self.seq_len, 1))
         one_hots.requires_grad = True
         return one_hots

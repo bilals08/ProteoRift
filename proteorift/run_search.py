@@ -29,10 +29,10 @@ if not os.path.exists("output_dir"):
     os.mkdir("output_dir")
 
 
-def run_atles(rank, spec_loader, gpu_device=None, use_distributed=True):
+def run_atles(rank, spec_loader, gpu_device=None, use_distributed=True, device=None):
     # Use gpu_device if provided (for single GPU sequential execution)
     device_id = gpu_device if gpu_device is not None else rank
-    device = torch.device(f"cuda:{device_id}" if torch.cuda.is_available() else "cpu")
+    device = device or torch.device(f"cuda:{device_id}" if torch.cuda.is_available() else "cpu")
 
     model_ = model.Net().to(device)
 
@@ -64,7 +64,7 @@ def run_atles(rank, spec_loader, gpu_device=None, use_distributed=True):
     model_.eval()
     # print(model_)
 
-    lens, cleavs, mods = dbsearch.runAtlesModel(spec_loader, model_, device_id)
+    lens, cleavs, mods = dbsearch.runAtlesModel(spec_loader, model_, device)
     pred_cleavs_softmax = torch.log_softmax(cleavs, dim=1)
     _, pred_cleavs = torch.max(pred_cleavs_softmax, dim=1)
     pred_mods_softmax = torch.log_softmax(mods, dim=1)
@@ -77,7 +77,7 @@ def run_atles(rank, spec_loader, gpu_device=None, use_distributed=True):
     )
 
 
-def run_specollate_par(rank, world_size, gConfig, forced_rank=None, use_distributed=True):
+def run_specollate_par(rank, world_size, gConfig, forced_rank=None, use_distributed=True, device=None):
     config.param_path = gConfig
     
     # Use forced_rank if provided (for sequential single-GPU execution)
@@ -113,7 +113,10 @@ def run_specollate_par(rank, world_size, gConfig, forced_rank=None, use_distribu
     )
 
     atles_start_time = time.time()
-    lens, cleavs, mods = run_atles(rank, spec_loader, gpu_device, use_distributed=use_distributed)
+    device = device or torch.device(f"cuda:{gpu_device}" if torch.cuda.is_available() else "cpu")
+    lens, cleavs, mods = run_atles(
+        rank, spec_loader, gpu_device, use_distributed=use_distributed, device=device
+    )
     atles_end_time = time.time()
     atles_time = atles_end_time - atles_start_time
 
@@ -134,12 +137,8 @@ def run_specollate_par(rank, world_size, gConfig, forced_rank=None, use_distribu
     # model_name = "512-embed-2-lstm-SnapLoss2D-80k-nist-massive-no-mc-semi-r2r-18.pt"  # 28.975k
     model_name = config.get_config(key="specollate_model_path", section="search")
     logger.info("Using model: %s", model_name)
-    model_device = gpu_device if gpu_device is not None else rank
-    # normalize to torch.device and fall back to CPU if CUDA not available
-    if isinstance(model_device, torch.device):
-        _snap_device = model_device
-    else:
-        _snap_device = torch.device(f"cuda:{model_device}" if torch.cuda.is_available() else "cpu")
+    _snap_device = device
+    model_device = device
 
     snap_model = specollate_model.Net(vocab_size=30, embedding_dim=512, hidden_lstm_dim=512, lstm_layers=2).to(_snap_device)
 
@@ -346,8 +345,6 @@ def setup(rank, world_size, gpu_device=None):
     device_to_set = gpu_device if gpu_device is not None else rank
     if(torch.cuda.is_available()):
         torch.cuda.set_device(device_to_set)
-    else:
-        torch.cpu.set_device(device_to_set)
     
     dist.init_process_group(backend=("nccl" if torch.cuda.is_available() else "gloo"), world_size=world_size, rank=rank)
 
